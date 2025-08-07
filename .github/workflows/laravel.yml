@@ -16,9 +16,15 @@ jobs:
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: test_db
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test_pass
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
     - uses: actions/checkout@v3
@@ -27,7 +33,7 @@ jobs:
       uses: shivammathur/setup-php@v2
       with:
         php-version: '8.2'
-        extensions: mbstring, bcmath, sqlite, pdo, mysql
+        extensions: mbstring, bcmath, pdo_mysql
         coverage: none
 
     - name: Install Composer dependencies
@@ -36,11 +42,20 @@ jobs:
     - name: Copy .env
       run: cp .env.example .env
 
+    - name: Configure .env for CI
+      run: |
+        php -r "file_put_contents('.env', preg_replace('/DB_DATABASE=.*/', 'DB_DATABASE=test_db', file_get_contents('.env')));"
+        php -r "file_put_contents('.env', preg_replace('/DB_USERNAME=.*/', 'DB_USERNAME=test_user', file_get_contents('.env')));"
+        php -r "file_put_contents('.env', preg_replace('/DB_PASSWORD=.*/', 'DB_PASSWORD=test_pass', file_get_contents('.env')));"
+
     - name: Generate app key
       run: php artisan key:generate
 
     - name: Set permissions
       run: chmod -R 777 storage bootstrap/cache
+
+    - name: Wait for MySQL to be ready
+      run: sleep 10
 
     - name: Run migrations
       run: php artisan migrate --force
